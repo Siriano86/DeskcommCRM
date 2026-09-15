@@ -26,7 +26,7 @@ services:
       - "3030:3000"
     environment:
       # Hash SHA512 hex da api key (NÃO plaintext). Cliente envia plaintext em X-Api-Key.
-      WAHA_API_KEY: ${WAHA_API_KEY_SHA512}
+      WAHA_API_KEY: "sha512:${WAHA_API_KEY_SHA512}"
       # Webhook base URL — precisa ser pública (use ngrok/cloudflared em dev).
       # host.docker.internal: o app Next roda no HOST em dev — localhost dentro do
       # container seria o próprio WAHA e o webhook nunca chegaria. Porta 3002:
@@ -39,6 +39,11 @@ services:
       # WHATSAPP_DEFAULT_ENGINE — WAHA_DEFAULT_ENGINE NÃO existe no WAHA e caía
       # silenciosamente no default WEBJS (browser, trava a sessão).
       WHATSAPP_DEFAULT_ENGINE: NOWEB
+      # Store do NOWEB para suportar sendSeen (marcação de visualizado / ticks azuis) e tradução de LID
+      WAHA_NOWEB_STORE_ENABLED: "True"
+      WAHA_NOWEB_STORE_FULL_SYNC: "True"
+      WHATSAPP_NOWEB_STORE_ENABLED: "True"
+      WHATSAPP_NOWEB_STORE_FULL_SYNC: "True"
       # Storage de mídia: Supabase Storage via Backend (NÃO inline base64).
       WAHA_DASHBOARD_ENABLED: "true"
       # Sem isto o container volta (ou o Docker Desktop acorda) e as sessões
@@ -84,6 +89,25 @@ services:
       retries: 3
       start_period: 20s
 
+  wacalls:
+    image: ghcr.io/jotadev66/wacalls@sha256:9ff52ef9455cf42125a911c38bb8c855f0cc205516cada2054e5c05546909022
+    platform: linux/amd64
+    container_name: deskcomm-wacalls
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "7881:7881/udp"
+    environment:
+      WACALLS_ADMIN_USER: ${WACALLS_ADMIN_USER:-admin}
+      WACALLS_ADMIN_PASSWORD: ${WACALLS_ADMIN_PASSWORD}
+      WACALLS_API_TOKEN: ${WACALLS_API_TOKEN}
+      WACALLS_WEBRTC_UDP_PORT: 7881
+      WACALLS_PUBLIC_IP: ${WACALLS_PUBLIC_IP:-127.0.0.1}
+    volumes:
+      - wacalls-data:/data
+
 volumes:
   waha-data:
   waha-media:
+  wacalls-data:
+

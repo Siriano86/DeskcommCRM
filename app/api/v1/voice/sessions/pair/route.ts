@@ -22,6 +22,7 @@ import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import { exigirVozLigada } from "@/lib/voice/guarda";
 import { getWacallsClient, wacallsFriendlyError } from "@/lib/wacalls/client";
+import { ensureWacallsSession } from "@/lib/wacalls/session";
 
 export const dynamic = "force-dynamic";
 

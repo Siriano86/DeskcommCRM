@@ -1,0 +1,11 @@
+{
+  "recorded_at": "2026-09-14T13:46:23.490Z",
+  "source": "stage_classifier_divergence",
+  "note": "divergência classificador×modelo: o classificador sugeriu \"qualifying\" e o modelo confirmou \"contacted\" via update_lead_state — candidato ao golden set para curadoria humana (SalesGPT).",
+  "tenant_id": "40f564c4-d7b9-47b3-98ca-5b4efb020e0d",
+  "lead_id": "435f663f-46f4-471b-80fd-8eb69f19acc1",
+  "job_id": "a87a54cd-2e66-45a1-8e35-f93cbd834d11",
+  "suggested_stage": "qualifying",
+  "confirmed_stage": "contacted",
+  "signal": "como funciona?"
+}
