@@ -21,6 +21,7 @@ import type { Logger } from '../agent-engine/obs/logger';
 
 export interface WacallsBridgeConfig {
   baseUrl: string;
+  apiToken?: string;
   /** Backoff de reconexão da SSE (ms) — sobe até este teto. */
   maxBackoffMs: number;
 }
@@ -506,8 +507,12 @@ export async function runVoiceCallsBridgeLoop(
 
   while (!signal.aborted) {
     try {
+      const headers: Record<string, string> = { 'X-Client-Id': 'deskcomm-worker' };
+      if (cfg.apiToken) {
+        headers.Authorization = `Bearer ${cfg.apiToken}`;
+      }
       const res = await fetch(`${cfg.baseUrl}/api/events`, {
-        headers: { 'X-Client-Id': 'deskcomm-worker' },
+        headers,
         signal,
       });
       if (!res.ok || !res.body) {

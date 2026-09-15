@@ -105,3 +105,49 @@ export async function sinalizarDigitando(
     recipient,
   });
 }
+
+/**
+ * Marca as mensagens da conversa como vistas (dois tracinhos azuis).
+ */
+export async function marcarVisto(
+  supabase: SupabaseClient,
+  input: SinalizarDigitandoInput,
+): Promise<void> {
+  const { data } = await supabase
+    .from("conversations")
+    .select(
+      `is_group, group_chat_id, contacts:contact_id(phone_number, wa_identity, wa_lid), ` +
+        `channel_sessions:channel_session_id(${CHANNEL_SESSION_REF_COLUMNS}, status)`,
+    )
+    .eq("id", input.conversationId)
+    .eq("organization_id", input.organizationId)
+    .maybeSingle();
+
+  const conversa = data as unknown as ConversaParaPresenca | null;
+  if (!conversa) return;
+
+  const sessao = conversa.channel_sessions;
+  if (!sessao || sessao.status !== SESSAO_SAUDAVEL) return;
+
+  const adapter = getAdapter(sessao.provider ?? DEFAULT_CHANNEL_PROVIDER);
+  if (!adapter.markSeen) return;
+
+  const recipient = adapter.resolveRecipient({
+    isGroup: conversa.is_group,
+    groupChatId: conversa.group_chat_id,
+    phoneNumber: conversa.contacts?.phone_number,
+    waIdentity: conversa.contacts?.wa_identity,
+    waLid: conversa.contacts?.wa_lid,
+  });
+  if (!recipient) return;
+
+  try {
+    await adapter.markSeen({
+      organizationId: input.organizationId,
+      sessionRef: resolveSessionRef(sessao),
+      recipient,
+    });
+  } catch {
+    // Degrada macio se a marcação de visualização falhar
+  }
+}

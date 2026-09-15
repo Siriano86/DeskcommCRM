@@ -135,7 +135,8 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
       })
       .eq("organization_id", activeOrg.orgId)
       .eq("id", runRow.id);
-  } catch {
+  } catch (err) {
+    console.error("AGENT_TEST_ERROR:", err);
     await admin
       .from("ai_agent_runs")
       .update({

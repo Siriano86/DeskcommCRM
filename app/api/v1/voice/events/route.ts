@@ -17,8 +17,10 @@ import QRCode from "qrcode";
 
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { resolveWacallsSession } from "@/lib/wacalls/session";
+import { ensureWacallsSession } from "@/lib/wacalls/session";
 import { getWacallsClient } from "@/lib/wacalls/client";
+import { exigirVozLigada } from "@/lib/voice/guarda";
+import { logger } from "@/lib/logger";
 import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -38,19 +40,37 @@ export async function GET(): Promise<Response> {
   if (!authz.ok) return authz.response;
   const { org: activeOrg } = authz;
 
-  if (!getWacallsClient()) {
+  const wacalls = getWacallsClient();
+  if (!wacalls) {
     return new Response(null, { status: 503 });
   }
 
   const supabase = await createClient();
-  const session = await resolveWacallsSession(supabase, activeOrg.orgId);
-  if (!session) {
-    return new Response(null, { status: 404 });
+
+  const vozDesligada = await exigirVozLigada(supabase, activeOrg.orgId, {
+    requestId,
+    instalacaoOferece: true,
+  });
+  if (vozDesligada) return new Response(null, { status: 403 });
+
+  let session;
+  try {
+    session = await ensureWacallsSession(supabase, activeOrg.orgId, wacalls);
+  } catch (err) {
+    logger.error("wacalls: falha ao garantir sessão para eventos", {
+      organization_id: activeOrg.orgId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return new Response(null, { status: 500 });
   }
   const { wacallsSessionId } = session;
 
+  const headers: Record<string, string> = { "X-Client-Id": `web_${activeOrg.orgId.slice(0, 8)}` };
+  if (env.WACALLS_API_TOKEN) {
+    headers.Authorization = `Bearer ${env.WACALLS_API_TOKEN}`;
+  }
   const upstream = await fetch(`${env.WACALLS_API_BASE_URL}/api/events`, {
-    headers: { "X-Client-Id": `web_${activeOrg.orgId.slice(0, 8)}` },
+    headers,
   });
   if (!upstream.ok || !upstream.body) {
     return new Response(null, { status: 502 });

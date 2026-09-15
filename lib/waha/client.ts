@@ -244,7 +244,14 @@ export class WahaClient {
     const res = await this.fetchComTeto(`${this.baseUrl}/api/sessions`, {
       method: "POST",
       headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ name, start: false, config: { ignore: CONVERSAS_IGNORADAS } }),
+      body: JSON.stringify({
+        name,
+        start: false,
+        config: {
+          ignore: CONVERSAS_IGNORADAS,
+          noweb: { store: { enabled: true, fullSync: true } },
+        },
+      }),
     });
     if (!res.ok && !knownSessionConflict(await res.json().catch(() => null), res.status, "create", name)) {
       throw new WahaSessionError("create", res.status);
@@ -555,6 +562,22 @@ export class WahaClient {
         body: JSON.stringify({ chatId, presence }),
       },
     );
+    if (!res.ok) throw new Error(`waha_${res.status}`);
+  }
+
+  /**
+   * Marca mensagens de uma conversa como vistas (dois tracinhos azuis).
+   * Requer store ativo no NOWEB (noweb.store.enabled: true).
+   */
+  async sendSeen(session: string, chatId: string): Promise<void> {
+    const res = await this.fetchComTeto(`${this.baseUrl}/api/sendSeen`, {
+      method: "POST",
+      headers: {
+        "X-Api-Key": this.apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ session, chatId }),
+    });
     if (!res.ok) throw new Error(`waha_${res.status}`);
   }
 

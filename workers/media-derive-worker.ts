@@ -99,7 +99,24 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       openrouterApiKey: process.env.OPENROUTER_API_KEY,
       cacheTtl: "1h",
     };
-    let llm = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id);
+    let llm: Awaited<ReturnType<typeof resolveOrgLlmConfig>>;
+    try {
+      llm = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id);
+    } catch (err) {
+      if (msg.type === "audio" && (llmCfg.openaiApiKey || process.env.OPENAI_API_KEY)) {
+        llm = {
+          provider: "openai",
+          apiKey: (llmCfg.openaiApiKey || process.env.OPENAI_API_KEY)!,
+          defaultModel: null,
+          params: {},
+          enabledModels: [],
+          orcamento: { modo: "off", tetoCents: 0, efetivoEm: null, limiarPct: 80 },
+          orcamentoIndisponivelPorque: null,
+        };
+      } else {
+        throw err;
+      }
+    }
 
     // ─── O painel de provedores manda AQUI também ────────────────────────────
     //

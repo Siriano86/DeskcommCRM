@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 import { exigirVozLigada } from "@/lib/voice/guarda";
 import { getWacallsClient, wacallsFriendlyError } from "@/lib/wacalls/client";
 import { resolveWacallsSession } from "@/lib/wacalls/session";
+import { getWahaClient } from "@/lib/waha/client";
 
 export const dynamic = "force-dynamic";
 
@@ -106,28 +107,59 @@ export async function POST(req: Request): Promise<Response> {
     return fail("contact_without_phone", "Este contato não tem telefone cadastrado.", 422, { requestId });
   }
 
+  let dialPhone = contact.phone_number;
   try {
-    const call = await wacalls.startCall(session.wacallsSessionId, user.id, contact.phone_number);
+    const waha = getWahaClient();
+    if (waha) {
+      const { data: wahaSessionRow } = await supabase
+        .from("channel_sessions")
+        .select("waha_session_name")
+        .eq("organization_id", activeOrg.orgId)
+        .eq("provider", "waha")
+        .is("archived_at", null)
+        .maybeSingle();
+
+      const wahaSessionName = (wahaSessionRow as { waha_session_name: string | null } | null)
+        ?.waha_session_name;
+      if (wahaSessionName) {
+        const check = await waha.checkContactExists(wahaSessionName, contact.phone_number);
+        if (check?.numberExists && check.chatId) {
+          const canonicalDigits = check.chatId.split("@")[0]?.replace(/\D/g, "");
+          if (canonicalDigits && canonicalDigits.length >= 8) {
+            dialPhone = canonicalDigits;
+          }
+        }
+      }
+    }
+  } catch {
+    // Falha na consulta WAHA não impede a ligação — usa número original
+  }
+
+  try {
+    const call = await wacalls.startCall(session.wacallsSessionId, user.id, dialPhone);
 
     const { data: inserted, error: insertErr } = await supabase
       .from("voice_calls")
-      .insert({
-        organization_id: activeOrg.orgId,
-        channel_session_id: session.channelSessionId,
-        contact_id: contact.id,
-        wacalls_call_id: call.callId,
-        direction: "outbound",
-        peer_phone: contact.phone_number,
-        status: "starting",
-        created_by: user.id,
-        // Quem discou já está na linha: o dono nasce aqui, e não espera o SSE
-        // devolver o `owner`. Sem isto haveria uma janela em que a ligação é de
-        // ninguém — e "de ninguém" é o estado em que qualquer colega desliga.
-        owner_user_id: user.id,
-      })
+      .upsert(
+        {
+          organization_id: activeOrg.orgId,
+          channel_session_id: session.channelSessionId,
+          contact_id: contact.id,
+          wacalls_call_id: call.callId,
+          direction: "outbound",
+          peer_phone: contact.phone_number,
+          status: "starting",
+          created_by: user.id,
+          // Quem discou já está na linha: o dono nasce aqui, e não espera o SSE
+          // devolver o `owner`. Sem isto haveria uma janela em que a ligação é de
+          // ninguém — e "de ninguém" é o estado em que qualquer colega desliga.
+          owner_user_id: user.id,
+        },
+        { onConflict: "organization_id,wacalls_call_id" },
+      )
       .select("id")
       .single();
-    if (insertErr || !inserted) throw new Error(`voice_calls insert: ${insertErr?.message}`);
+    if (insertErr || !inserted) throw new Error(`voice_calls upsert: ${insertErr?.message}`);
 
     void audit({
       action: "voice.call_started",
@@ -139,10 +171,21 @@ export async function POST(req: Request): Promise<Response> {
       metadata: { contact_id: contact.id, direction: "outbound" },
     });
 
-    return ok(
-      { id: (inserted as { id: string }).id, callId: call.callId, status: "starting" },
-      { requestId, status: 201 },
-    );
+    const callPayload = {
+      id: (inserted as { id: string }).id,
+      callId: call.callId,
+      status: "starting" as const,
+      direction: "outbound" as const,
+      peer_phone: contact.phone_number,
+      contact_id: contact.id,
+      owner_user_id: user.id,
+      created_by: user.id,
+      started_at: new Date().toISOString(),
+      answered_at: null,
+      end_reason: null,
+    };
+
+    return ok(callPayload, { requestId, status: 201 });
   } catch (err) {
     logger.error("wacalls: chamada outbound falhou", {
       request_id: requestId,

@@ -4053,6 +4053,21 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       return;
     }
     if (operationAgent?.pausedAt) return;
+
+    // Marca visualização (dois checks azuis) assim que a IA assume o processamento da mensagem
+    try {
+      const { marcarVisto } = await import('@/lib/messaging/presenca');
+      await marcarVisto(deps.crmCfg.supabase, {
+        organizationId: job.organization_id,
+        conversationId: payload.conversation_id,
+      });
+    } catch (seenErr) {
+      deps.log.warn('falha ao marcar visualização no canal (segue processamento)', {
+        conversation_id: payload.conversation_id,
+        error: seenErr instanceof Error ? seenErr.message : String(seenErr),
+      });
+    }
+
     await runAgentTurn(deps, job, pool, ctx, {
       resolvedAgent,
       channelSessionId: payload.channel_session_id,

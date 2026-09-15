@@ -380,19 +380,23 @@ export function AgentForm(props: Props) {
 
   const isValid = Object.keys(validation).length === 0;
 
+  const isChaveDaInstalacao =
+    form.credential_id === CHAVE_DA_INSTALACAO &&
+    (props.provedoresDaInstalacao ?? []).includes(form.provider);
+
   const publishBlockReason = React.useMemo(() => {
     if (!isEdit) return t("Salve o agent antes de publicar.");
     if (!props.draft) return t("Sem rascunho para publicar.");
     if (!isValid) return t("Resolva os erros do formulário.");
     if (dirty) return t("Salve o rascunho antes de publicar.");
-    if (!cred) return t("Escolha a chave de acesso da empresa de inteligência artificial.");
-    if (credSt !== "validated")
+    if (!cred && !isChaveDaInstalacao) return t("Escolha a chave de acesso da empresa de inteligência artificial.");
+    if (cred && credSt !== "validated")
       return `${t("Credencial")} ${form.provider} ${credSt === "invalid" ? t("inválida") : t("ainda não validada")}.`;
     if (!channelSession) return t("Escolha por qual número de WhatsApp ele atende.");
     if (channelSession.status !== "working" && channelSession.status !== "WORKING")
       return `${t("Número WhatsApp não está conectado (status:")} ${channelSession.status}).`;
     return null;
-  }, [isEdit, props, isValid, dirty, cred, credSt, form.provider, channelSession, t]);
+  }, [isEdit, props, isValid, dirty, cred, credSt, isChaveDaInstalacao, form.provider, channelSession, t]);
 
   // ---------------------------------------------------------------------
   // Handlers

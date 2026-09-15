@@ -271,6 +271,15 @@ export interface ChannelAdapter {
   }): Promise<void>;
 
   /**
+   * Marca mensagens da conversa como visualizadas (dois tracinhos azuis).
+   * Opcional: canal que não suporta ou não tem sessão ativa ignora.
+   */
+  markSeen?(input: ChannelTenantScope & {
+    sessionRef: string;
+    recipient: string;
+  }): Promise<void>;
+
+  /**
    * A conexão está de pé AGORA? Pergunta feita ao transporte, não ao banco.
    *
    * Existe porque o banco guarda o último estado que alguém CONTOU, e a falha

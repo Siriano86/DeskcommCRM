@@ -60,6 +60,10 @@ function dubleSupabase() {
         inseridas.push({ tabela, linha });
         return cadeia;
       };
+      cadeia.upsert = (linha: Record<string, unknown>) => {
+        inseridas.push({ tabela, linha });
+        return cadeia;
+      };
       cadeia.single = async () => respostas[tabela] ?? { data: null, error: null };
       cadeia.maybeSingle = async () => respostas[tabela] ?? { data: null, error: null };
       cadeia.then = (ok: (r: unknown) => unknown) =>

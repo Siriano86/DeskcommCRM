@@ -21,6 +21,7 @@ import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import { exigirVozLigada } from "@/lib/voice/guarda";
 import { getWacallsClient, wacallsFriendlyError } from "@/lib/wacalls/client";
+import { ensureWacallsSession } from "@/lib/wacalls/session";
 
 export const dynamic = "force-dynamic";
 
@@ -73,55 +74,12 @@ export async function POST(): Promise<Response> {
   });
   if (vozDesligada) return vozDesligada;
 
-  const { data: existingRaw } = await supabase
-    .from("channel_sessions")
-    .select("id, wacalls_session_id")
-    .eq("organization_id", activeOrg.orgId)
-    .eq("provider", "wacalls")
-    .is("archived_at", null)
-    .maybeSingle();
-  const existing = existingRaw as { id: string; wacalls_session_id: string | null } | null;
-
   try {
-    let channelSessionId = existing?.id ?? null;
-    let wacallsSessionId = existing?.wacalls_session_id ?? null;
-
-    if (!wacallsSessionId) {
-      const created = await wacalls.createSession(`org_${activeOrg.orgId.slice(0, 8)}`);
-      wacallsSessionId = created.id;
-
-      if (channelSessionId) {
-        await supabase
-          .from("channel_sessions")
-          .update({ wacalls_session_id: wacallsSessionId })
-          .eq("id", channelSessionId);
-      } else {
-        // webhook_path_token/webhook_secret_encrypted são NOT NULL na tabela
-        // mas não fazem sentido pra este provider — o WaCalls empurra estado
-        // por SSE (§4.2 da spec), não webhook HMAC. Mesmo placeholder que
-        // onboarding/whatsapp/session/route.ts usa quando o fluxo não assina:
-        // path_token cai no DEFAULT do banco, secret é 1 byte zero (bytea).
-        //
-        // `engine` NÃO entra: `channel_sessions_engine_check` só aceita
-        // NOWEB/WEBJS (vocabulário do transporte principal) — omitido, cai no DEFAULT
-        // 'NOWEB' da coluna, que não significa nada pra este provider mas
-        // satisfaz o CHECK. Mesmo padrão do canal oficial/parceiro, que
-        // também não grava `engine`.
-        const { data: inserted, error: insertErr } = await supabase
-          .from("channel_sessions")
-          .insert({
-            organization_id: activeOrg.orgId,
-            provider: "wacalls",
-            wacalls_session_id: wacallsSessionId,
-            status: "STARTING",
-            webhook_secret_encrypted: Buffer.from([0]),
-          })
-          .select("id")
-          .single();
-        if (insertErr || !inserted) throw new Error(`channel_sessions insert: ${insertErr?.message}`);
-        channelSessionId = (inserted as { id: string }).id;
-      }
-    }
+    const { channelSessionId, wacallsSessionId } = await ensureWacallsSession(
+      supabase,
+      activeOrg.orgId,
+      wacalls,
+    );
 
     await wacalls.pairSession(wacallsSessionId);
 
@@ -130,7 +88,7 @@ export async function POST(): Promise<Response> {
       actorUserId: user.id,
       organizationId: activeOrg.orgId,
       resourceType: "channel_session",
-      resourceId: channelSessionId ?? null,
+      resourceId: channelSessionId,
       requestId,
       metadata: { wacalls_session_id: wacallsSessionId },
     });

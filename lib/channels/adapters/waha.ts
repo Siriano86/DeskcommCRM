@@ -119,6 +119,19 @@ export const wahaAdapter: ChannelAdapter = {
   },
 
   /**
+   * Marca mensagens da conversa como visualizadas (dois tracinhos azuis).
+   */
+  async markSeen(input: { sessionRef: string; recipient: string }): Promise<void> {
+    const client = getWahaClient();
+    if (!client) return;
+    try {
+      await client.sendSeen(input.sessionRef, input.recipient);
+    } catch {
+      // Degrada macio se store não estiver disponível ou ocorrer falha transitória
+    }
+  },
+
+  /**
    * Pergunta ao transporte se a conexão está de pé.
    *
    * Três desfechos, e a diferença entre eles é o que o operador vai FAZER:

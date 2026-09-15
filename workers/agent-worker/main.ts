@@ -353,7 +353,11 @@ export async function startWorker(
     env.WACALLS_API_BASE_URL !== undefined
       ? runVoiceCallsBridgeLoop(
           pool,
-          { baseUrl: env.WACALLS_API_BASE_URL, maxBackoffMs: env.WACALLS_BRIDGE_MAX_BACKOFF_MS },
+          {
+            baseUrl: env.WACALLS_API_BASE_URL,
+            apiToken: env.WACALLS_API_TOKEN,
+            maxBackoffMs: env.WACALLS_BRIDGE_MAX_BACKOFF_MS,
+          },
           log,
           loopsAbort.signal,
         )
