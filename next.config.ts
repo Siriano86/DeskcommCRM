@@ -59,6 +59,7 @@ const nextConfig: NextConfig = {
   typedRoutes: true,
   experimental: {
     optimizePackageImports: ["@phosphor-icons/react", "lucide-react", "date-fns"],
+    devMemoryThresholdRestart: false,
   },
   images: {
     // O app não usa next/image de fato (só <img> raw); desligar o otimizador
