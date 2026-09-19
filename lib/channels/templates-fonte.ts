@@ -43,6 +43,7 @@ const FONTE: Record<ProviderDeMensagem, FonteDeTemplates | null> = {
   waha: null,
   meta_cloud: "oficial",
   zernio: "parceiro",
+  instagram: null,
 };
 
 /** `null` quando este canal não trabalha com definições aprovadas. */

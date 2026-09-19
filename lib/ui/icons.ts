@@ -142,4 +142,8 @@ export {
   GoogleLogo,
   MapPin,
   ArrowsOutSimple,
+  // omnichannel (badges e seletores de canal)
+  InstagramLogo,
+  TelegramLogo,
+  WhatsappLogo,
 } from "@phosphor-icons/react/dist/ssr";

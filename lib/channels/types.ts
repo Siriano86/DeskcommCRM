@@ -9,7 +9,7 @@ import type { OutboundMedia } from "@/lib/waha/media-send";
 
 export type { OutboundMedia };
 
-export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "wacalls";
+export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "wacalls" | "instagram";
 
 /**
  * Os providers que transportam MENSAGEM — o subconjunto sobre o qual a matriz
@@ -78,6 +78,8 @@ export interface RecipientInput {
    * `waIdentity.startsWith("lid:")` — justo o caso que a regra protege.
    */
   waLid?: string | null | undefined;
+  /** Instagram user ID (IGSID) ou @username quando o contato veio do Instagram. */
+  instagramId?: string | null | undefined;
 }
 
 /** Contato compartilhado (vcard) — só `kind: "contact"`. */

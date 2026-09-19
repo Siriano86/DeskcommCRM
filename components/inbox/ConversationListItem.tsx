@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import { CanalBadge } from "@/components/channels/CanalBadge";
 
 interface Props {
   conversation: ConversationWithContact;
@@ -269,14 +270,10 @@ export function ConversationListItem({
               <OwnerBadge ownerKind="user" ownerName={comando.nome ?? t("Atendente")} compacto />
             )}
             {mostrarCanal && rotuloCanal && (
-              <Badge
-                variant="outline"
-                className="h-4 gap-1 px-1.5 text-[10px] font-normal text-text-muted"
-                title={`${t("Entrou por")} ${rotuloCanal}`}
-              >
-                <Phone size={9} weight="regular" aria-hidden />
-                {rotuloCanal}
-              </Badge>
+              <CanalBadge
+                provider={canal?.provider}
+                label={rotuloCanal}
+              />
             )}
             {c?.is_blocked && (
               <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">

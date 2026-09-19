@@ -20,6 +20,7 @@ import { SnoozeButton } from "@/components/inbox/SnoozeButton";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import { CanalBadge } from "@/components/channels/CanalBadge";
 
 interface Props {
   conversation: ConversationWithContact;
@@ -148,6 +149,10 @@ export function ConversationHeader({ conversation }: Props) {
           <Badge variant="outline" className="h-4 px-1.5 text-[10px]">
             {t(STATUS_LABEL[status] ?? status)}
           </Badge>
+          <CanalBadge
+            provider={conversation.channel_sessions?.provider ?? null}
+            label={conversation.channel_sessions?.display_name ?? conversation.channel_sessions?.phone_number ?? null}
+          />
           {/* Ao lado do estado, não escondido num painel: a pergunta "dá para
               escrever agora?" se faz ANTES de digitar, não depois de receber um
               `failed` com um código de cinco dígitos. */}
