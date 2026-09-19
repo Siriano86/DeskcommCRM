@@ -76,17 +76,6 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     groups: "limited",
     costPerMessage: true,
   },
-  // Instagram Messaging API (Meta Graph API)
-  instagram: {
-    freeformOutsideWindow: false,
-    requiresTemplates: false,
-    canManageTemplates: false,
-    banRisk: false,
-    minIntervalMs: null,
-    voiceNote: "opus-only",
-    groups: "none",
-    costPerMessage: false,
-  },
 };
 
 /**
@@ -108,7 +97,6 @@ export const DEFAULT_CHANNEL_PROVIDER: ChannelProvider = "waha";
 export const CHANNEL_PROVIDER_WAHA: ChannelProvider = "waha";
 export const CHANNEL_PROVIDER_META: ChannelProvider = "meta_cloud";
 export const CHANNEL_PROVIDER_ZERNIO: ChannelProvider = "zernio";
-export const CHANNEL_PROVIDER_INSTAGRAM: ChannelProvider = "instagram";
 /** Chamada de voz WhatsApp (spec 18). Não transporta mensagem — ver abaixo. */
 export const CHANNEL_PROVIDER_WACALLS: ChannelProvider = "wacalls";
 
@@ -131,7 +119,6 @@ export const PROVIDERS_DE_MENSAGEM = [
   "waha",
   "meta_cloud",
   "zernio",
-  "instagram",
 ] as const satisfies readonly ProviderDeMensagem[];
 
 /**

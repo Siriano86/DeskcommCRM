@@ -9,7 +9,7 @@ import type { OutboundMedia } from "@/lib/waha/media-send";
 
 export type { OutboundMedia };
 
-export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "wacalls" | "instagram";
+export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "wacalls";
 
 /**
  * Os providers que transportam MENSAGEM — o subconjunto sobre o qual a matriz
@@ -78,8 +78,6 @@ export interface RecipientInput {
    * `waIdentity.startsWith("lid:")` — justo o caso que a regra protege.
    */
   waLid?: string | null | undefined;
-  /** Instagram user ID (IGSID) ou @username quando o contato veio do Instagram. */
-  instagramId?: string | null | undefined;
 }
 
 /** Contato compartilhado (vcard) — só `kind: "contact"`. */
@@ -235,6 +233,23 @@ export interface ChannelAdapter {
   ): Promise<string | null>;
 
   /**
+   * O número, em dígitos, pelo qual este canal REGISTRA um telefone — `null`
+   * quando não souber, quando o número não existir ou quando só houver
+   * identidade opaca.
+   *
+   * Existe porque o cadastro guarda o celular brasileiro COM o nono dígito e o
+   * WhatsApp registra muito deles SEM. Quem precisa do endereço exato fora do
+   * envio de mensagem — a chamada de voz, que disca por dígitos e não pergunta
+   * nada a ninguém — pede aqui, testando a presença do método em vez de
+   * perguntar QUAL provider é.
+   *
+   * OPCIONAL: só implementa quem consegue perguntar à plataforma.
+   */
+  resolveRegisteredPhone?(
+    input: ChannelTenantScope & { sessionRef: string; phone: string },
+  ): Promise<string | null>;
+
+  /**
    * Gestão das definições aprovadas — criar, editar, apagar.
    *
    * OPCIONAL pelo mesmo motivo dos dois métodos acima: nem todo canal expõe
@@ -268,15 +283,6 @@ export interface ChannelAdapter {
    * aqui esconderia de todo chamador futuro que a chamada nem chega.
    */
   signalTyping?(input: ChannelTenantScope & {
-    sessionRef: string;
-    recipient: string;
-  }): Promise<void>;
-
-  /**
-   * Marca mensagens da conversa como visualizadas (dois tracinhos azuis).
-   * Opcional: canal que não suporta ou não tem sessão ativa ignora.
-   */
-  markSeen?(input: ChannelTenantScope & {
     sessionRef: string;
     recipient: string;
   }): Promise<void>;

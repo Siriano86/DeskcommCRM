@@ -15,13 +15,22 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import { exigirVozLigada } from "@/lib/voice/guarda";
-import { getWacallsClient, wacallsFriendlyError } from "@/lib/wacalls/client";
+import { resolverNumeroDiscavel } from "@/lib/voice/numero-discavel";
+import { getWacallsClient, wacallsFriendlyError, wacallsSemConexao } from "@/lib/wacalls/client";
 import { resolveWacallsSession } from "@/lib/wacalls/session";
-import { getWahaClient } from "@/lib/waha/client";
 
 export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({ contactId: z.string().uuid() });
+
+/**
+ * As colunas que o painel (`VoiceCallRow`, `hooks/voice/useVoiceCallSession.ts`)
+ * lê. A resposta devolve a linha inteira porque o painel decide "é minha?" por
+ * `owner_user_id`/`created_by`: uma resposta só com `{id, status}` escondia o
+ * painel de quem discou.
+ */
+const COLUNAS_DO_PAINEL =
+  "id, contact_id, direction, peer_phone, status, end_reason, started_at, answered_at, owner_user_id, created_by";
 
 export async function POST(req: Request): Promise<Response> {
   // Acompanhamento administrativo somente-leitura não liga, não atende, não
@@ -107,85 +116,87 @@ export async function POST(req: Request): Promise<Response> {
     return fail("contact_without_phone", "Este contato não tem telefone cadastrado.", 422, { requestId });
   }
 
-  let dialPhone = contact.phone_number;
   try {
-    const waha = getWahaClient();
-    if (waha) {
-      const { data: wahaSessionRow } = await supabase
-        .from("channel_sessions")
-        .select("waha_session_name")
-        .eq("organization_id", activeOrg.orgId)
-        .eq("provider", "waha")
-        .is("archived_at", null)
-        .maybeSingle();
-
-      const wahaSessionName = (wahaSessionRow as { waha_session_name: string | null } | null)
-        ?.waha_session_name;
-      if (wahaSessionName) {
-        const check = await waha.checkContactExists(wahaSessionName, contact.phone_number);
-        if (check?.numberExists && check.chatId) {
-          const canonicalDigits = check.chatId.split("@")[0]?.replace(/\D/g, "");
-          if (canonicalDigits && canonicalDigits.length >= 8) {
-            dialPhone = canonicalDigits;
-          }
-        }
-      }
+    // O cadastro guarda o celular COM o nono dígito; o WhatsApp pode tê-lo
+    // registrado SEM. Discar o do cadastro mandava a oferta para um endereço
+    // inexistente — ver o cabeçalho de `lib/voice/numero-discavel.ts`.
+    const destino = await resolverNumeroDiscavel(supabase, activeOrg.orgId, contact.phone_number);
+    if (destino.fonte === "cadastro") {
+      logger.warn("wacalls: número discado sem confirmação do WhatsApp", {
+        request_id: requestId,
+        organization_id: activeOrg.orgId,
+        contact_id: contact.id,
+      });
     }
-  } catch {
-    // Falha na consulta WAHA não impede a ligação — usa número original
-  }
-
-  try {
-    const call = await wacalls.startCall(session.wacallsSessionId, user.id, dialPhone);
+    const call = await wacalls.startCall(session.wacallsSessionId, user.id, destino.digitos);
 
     const { data: inserted, error: insertErr } = await supabase
       .from("voice_calls")
-      .upsert(
-        {
-          organization_id: activeOrg.orgId,
-          channel_session_id: session.channelSessionId,
-          contact_id: contact.id,
-          wacalls_call_id: call.callId,
-          direction: "outbound",
-          peer_phone: contact.phone_number,
-          status: "starting",
-          created_by: user.id,
-          // Quem discou já está na linha: o dono nasce aqui, e não espera o SSE
-          // devolver o `owner`. Sem isto haveria uma janela em que a ligação é de
-          // ninguém — e "de ninguém" é o estado em que qualquer colega desliga.
-          owner_user_id: user.id,
-        },
-        { onConflict: "organization_id,wacalls_call_id" },
-      )
-      .select("id")
+      .insert({
+        organization_id: activeOrg.orgId,
+        channel_session_id: session.channelSessionId,
+        contact_id: contact.id,
+        wacalls_call_id: call.callId,
+        direction: "outbound",
+        peer_phone: contact.phone_number,
+        status: "starting",
+        created_by: user.id,
+        // Quem discou já está na linha: o dono nasce aqui, e não espera o SSE
+        // devolver o `owner`. Sem isto haveria uma janela em que a ligação é de
+        // ninguém — e "de ninguém" é o estado em que qualquer colega desliga.
+        owner_user_id: user.id,
+      })
+      .select(COLUNAS_DO_PAINEL)
       .single();
-    if (insertErr || !inserted) throw new Error(`voice_calls upsert: ${insertErr?.message}`);
+
+    let linha = inserted as ({ id: string; status: string } & Record<string, unknown>) | null;
+    if (insertErr?.code === "23505") {
+      // A PONTE DE EVENTOS CHEGOU PRIMEIRO — e ela chega primeiro SEMPRE.
+      //
+      // O WaCalls emite `call-status` na `/api/events` no instante em que envia
+      // a oferta, antes de responder este `startCall`; o worker grava a linha
+      // por `pg` direto (~200 ms na frente deste INSERT, que passa pelo
+      // PostgREST). Medido na VPS em 2026-09-15: duas ligações, dois
+      // `duplicate key value violates unique constraint
+      // "voice_calls_organization_id_wacalls_call_id_key"`, dois 502 na tela
+      // com o telefone do outro lado tocando.
+      //
+      // A linha da ponte é a MESMA ligação, só que escrita por quem não sabe o
+      // que esta rota sabe: que foi alguém daqui que discou, para este contato.
+      // Então completa-se a linha em vez de recusar — e o `status` fica de
+      // fora de propósito: o da ponte é mais novo que o "starting" daqui.
+      const { data: reconciliada, error: reconcErr } = await supabase
+        .from("voice_calls")
+        .update({
+          direction: "outbound",
+          contact_id: contact.id,
+          created_by: user.id,
+          owner_user_id: user.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("organization_id", activeOrg.orgId)
+        .eq("wacalls_call_id", call.callId)
+        .select(COLUNAS_DO_PAINEL)
+        .single();
+      if (reconcErr || !reconciliada) {
+        throw new Error(`voice_calls reconcile: ${reconcErr?.message}`);
+      }
+      linha = reconciliada as { id: string; status: string } & Record<string, unknown>;
+    } else if (insertErr || !linha) {
+      throw new Error(`voice_calls insert: ${insertErr?.message}`);
+    }
 
     void audit({
       action: "voice.call_started",
       actorUserId: user.id,
       organizationId: activeOrg.orgId,
       resourceType: "voice_call",
-      resourceId: (inserted as { id: string }).id,
+      resourceId: linha.id,
       requestId,
       metadata: { contact_id: contact.id, direction: "outbound" },
     });
 
-    const callPayload = {
-      id: (inserted as { id: string }).id,
-      callId: call.callId,
-      status: "starting" as const,
-      direction: "outbound" as const,
-      peer_phone: contact.phone_number,
-      contact_id: contact.id,
-      owner_user_id: user.id,
-      created_by: user.id,
-      started_at: new Date().toISOString(),
-      answered_at: null,
-      end_reason: null,
-    };
-
-    return ok(callPayload, { requestId, status: 201 });
+    return ok({ ...linha, callId: call.callId }, { requestId, status: 201 });
   } catch (err) {
     logger.error("wacalls: chamada outbound falhou", {
       request_id: requestId,
@@ -193,6 +204,19 @@ export async function POST(req: Request): Promise<Response> {
       contact_id: contact.id,
       error: err instanceof Error ? err.message : String(err),
     });
+    // Socket do WhatsApp caído — ver o cabeçalho de `wacallsSemConexao` para o
+    // que isso É (queda de rede passageira) e para o que já NÃO É (o cliente
+    // morto que `/pair` deixava para trás, resolvido na rota de pareamento).
+    // 503 e não 502, porque a distinção não é cosmética: `lib/api/client.ts`
+    // repete 503 (até 3 tentativas, espaçadas pelo `Retry-After`), e repetir
+    // AQUI é seguro — o erro nasce ANTES de qualquer `<call>` sair para o
+    // telefone, então nada foi discado duas vezes.
+    if (wacallsSemConexao(err)) {
+      return fail("wacalls_not_connected", wacallsFriendlyError(err), 503, {
+        requestId,
+        headers: { "Retry-After": "3" },
+      });
+    }
     return fail("wacalls_error", wacallsFriendlyError(err), 502, { requestId });
   }
 }
